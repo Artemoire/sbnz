@@ -1,0 +1,33 @@
+package rules;
+
+import org.apache.commons.lang.time.DateUtils;
+import java.util.concurrent.TimeUnit;
+import java.util.Date;
+
+import model.Accommodation;
+import model.Tier;
+import model.Reservation;
+import model.Discount;
+import model.Customer;
+
+rule "Recommend accommodations for user by preference"
+	agenda-group "test-com"
+    when 
+    	$c: Customer($reservations: reservations, $tier: tier)
+    	Number($avgPrice: doubleValue) from accumulate(
+            Reservation(
+                completed == true,
+                $priceX: accommodation.getPrice()                
+            ) from $reservations,
+            init(double avg = 0; int count = 0;),
+            action(avg += $priceX; count += 1;),
+            reverse(avg -= $priceX; count -= 1;),
+            result(avg / count)
+        )
+        $a: Accommodation(price >= $avgPrice, 
+        tier.ordinal() >= $tier.ordinal(),
+        $a.isPrefferedBy($c)
+        )
+    then
+        System.out.println("Recommend staying at "+$a.getName()+" based on preference");
+end

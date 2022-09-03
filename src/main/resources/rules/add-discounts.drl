@@ -1,0 +1,121 @@
+package rules;
+
+import org.apache.commons.lang.time.DateUtils;
+import java.util.concurrent.TimeUnit;
+import java.util.Date;
+
+import model.Accommodation;
+import model.Tier;
+import model.Reservation;
+import model.Discount;
+import model.Customer;
+
+declare LimitBadUserDiscountApplied
+    customer: Customer
+end
+
+declare LimitMaxDiscountApplied
+	customer: Customer
+end
+
+rule "Discount 30% for new members"
+	salience 303
+	agenda-group "add-discounts"
+    when 
+    	$r: Reservation(discount == null)
+    	Customer(DateUtils.addDays(new Date(), -30).before(registeredAt))
+    then
+        System.out.println("Applying new member discount 30%");
+        $r.applyDiscount(0.3);
+        update($r);
+end
+
+rule "Discount 40% unrated accommodations for loyal members"
+	salience 302
+	agenda-group "add-discounts"
+    when 
+    	$r: Reservation(discount == null, accommodation.getRating() == 0)
+    	Customer(tier != Tier.STONE, $reservations: reservations)
+    	Number(intValue >= 3) from accumulate(
+            Reservation(
+                completed == true,
+                DateUtils.addYears(new Date(), -1).before(reservedTo)
+            ) from $reservations,
+            count()
+        )  
+    then
+        System.out.println("Applying new accommodation discount 40%");
+        $r.applyDiscount(0.4);
+        update($r);
+end
+
+rule "Apply coupon"
+	salience 301
+	agenda-group "add-discounts"
+    when 
+    	$c: Customer(coupons.size > 0)
+    	$r: Reservation()
+    then
+        System.out.println("Applying "+$c.getCoupons().get(0).getPercentage()*100+"% coupon");
+        $r.applyDiscount($c.getCoupons().get(0).getPercentage());
+        $c.getCoupons().remove(0);
+        update($r);
+        update($c);
+end
+
+rule "Apply loyalty discount"
+	salience 300
+	agenda-group "add-discounts"
+	lock-on-active true
+    when 
+    	$c: Customer($reservations: reservations)
+    	$r: Reservation($a: accommodation, accommodation.getLoyaltyDiscount() > 0.0)
+    	Number(intValue >= 3) from accumulate(
+            Reservation(
+                completed == true,
+                accommodation == $a
+            ) from $reservations,
+            count()
+        )
+    then
+        System.out.println("Applying loyalty discount "+$a.getLoyaltyDiscount()*100+"%");
+        $r.applyDiscount($a.getLoyaltyDiscount());
+        update($r);
+end
+
+rule "Apply bad user limit"
+	salience 101
+	agenda-group "add-discounts"
+    when 
+    	$c: Customer($reservations: reservations)
+    	$r: Reservation(discount != null, discount.getPercentage() > 0.25)
+    	Number(intValue >= 3) from accumulate(
+            Reservation(
+                cancelled == true,
+                DateUtils.addDays(new Date(), -60).before(reservedTo)
+            ) from $reservations,
+            count()
+        )
+        not LimitBadUserDiscountApplied(customer == $c)
+    then
+        System.out.println("Applying bad user limit 25% discount");
+        $r.setDiscount(new Discount(0.25));
+        update($r);
+        insert(new LimitBadUserDiscountApplied($c));
+        
+end
+
+rule "Limit discount"
+	salience 100
+	agenda-group "add-discounts"
+    when 
+    	$r: Reservation(discount != null, $a: accommodation, $c: customer,
+    	discount.getPercentage() > $a.getMaxDiscount())
+    	not LimitMaxDiscountApplied(customer == $c)
+    then    	
+        System.out.println("Discount too high! limiting to "+$r.getAccommodation().getMaxDiscount()*100+"%");
+        $r.getDiscount().setPercentage($r.getAccommodation().getMaxDiscount());
+        update($r);
+        insert(new LimitMaxDiscountApplied($c));
+end
+	

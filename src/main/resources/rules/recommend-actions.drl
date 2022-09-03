@@ -1,0 +1,52 @@
+package rules;
+
+import org.apache.commons.lang.time.DateUtils;
+import java.util.concurrent.TimeUnit;
+import java.util.Date;
+
+import model.Accommodation;
+import model.Tier;
+import model.Reservation;
+
+global Date tStart;
+global Date tEnd;
+
+rule "Recommend disabling discounts"
+	agenda-group "recommend-actions"
+    when        
+        $a: Accommodation($location: location, $distance: distanceFromLocation, isFree(tStart, tEnd))
+		not Accommodation(this != $a, location == $location,
+			isFree(tStart, tEnd),
+			distanceFromLocation < $distance
+		)
+		not Accommodation(this != $a, 
+		location == $location,
+		Math.abs(distanceFromLocation - $distance) < 5.0) 
+    then
+        System.out.println("RECOMMEND DISABLING DISCOUNTS FOR ACCOMMODATION "+$a.getName());        
+end
+
+rule "Recommend price change"
+	agenda-group "recommend-actions"
+    when        
+        $a: Accommodation(
+    		$location: location, 
+        	$rating: rating,
+        	$price: price
+		)
+		$avg: Number(doubleValue >= $price * 1.1 || doubleValue <= $price * 0.9 ) from accumulate(
+            Accommodation(
+            	this != $a,
+                location == $location,
+                rating >= $rating,
+				$priceOther: price
+            ),
+            init(double avg = 0; int count = 0;),
+            action(avg += $priceOther; count += 1;),
+            reverse(avg -= $priceOther; count -= 1;),
+            result(avg / count)
+        ) 
+    then
+    	if ($avg.doubleValue() > $a.getPrice()) System.out.println("RECOMMEND INCREASING PRICE FOR ACCOMMODATION "+$a.getName());
+    	else System.out.println("RECOMMEND DECREASING PRICE FOR ACCOMMODATION "+$a.getName());        
+end

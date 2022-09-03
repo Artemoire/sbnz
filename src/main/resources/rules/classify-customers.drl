@@ -1,0 +1,134 @@
+package rules;
+
+import org.apache.commons.lang.time.DateUtils;
+import java.util.concurrent.TimeUnit;
+import java.util.Date;
+
+import model.Customer;
+import model.Tier;
+import model.Reservation;
+
+rule "Upgrade customer tier to Iron"
+	agenda-group "classify-customers"
+    when        
+        $c: Customer(tier == Tier.STONE, $reservations: reservations)        
+		Number(intValue >= 3) from accumulate(
+            Reservation(
+                completed == true                
+            ) from $reservations,
+            count()
+        )
+    then
+        System.out.println("Upgraded customer to IRON");
+        $c.setTier(Tier.IRON);
+        update($c);
+end 
+
+rule "Upgrade customer tier to Diamond (1)"
+	agenda-group "classify-customers"
+    when        
+        $c: Customer(tier == Tier.IRON, $reservations: reservations)        
+		Number(intValue >= 10) from accumulate(
+            Reservation(
+                completed == true                
+            ) from $reservations,
+            count()
+        )
+        Reservation(
+         	DateUtils.addDays(new Date(), -90).before(reservedTo), 
+			completed == true
+        ) from $reservations
+    then
+        System.out.println("Upgraded customer to DIAMOND");
+        $c.setTier(Tier.DIAMOND);
+        update($c);
+end 
+
+rule "Upgrade customer tier to Diamond (2)"
+	agenda-group "classify-customers"
+    when        
+        $c: Customer(tier == Tier.IRON, $reservations: reservations)        
+		Number(intValue >= 10) from accumulate(
+            Reservation(
+                completed == true,
+                accommodation.getPrice() >= 150,                
+               	$from: reservedFrom,
+               	$to: reservedTo                
+            ) from $reservations,
+            init(int count = 0;),
+            action(count += TimeUnit.DAYS.convert($to.getTime()-$from.getTime(), TimeUnit.MILLISECONDS);),
+            reverse(count -= TimeUnit.DAYS.convert($to.getTime()-$from.getTime(), TimeUnit.MILLISECONDS);),
+            result(count)
+        )
+    then
+        System.out.println("Upgraded customer to DIAMOND");
+        $c.setTier(Tier.DIAMOND);
+        update($c);
+end
+
+rule "Upgrade customer tier to Netherite"
+	agenda-group "classify-customers"
+    when        
+        $c: Customer(tier == Tier.DIAMOND, $reservations: reservations)        
+		Number(intValue >= 20) from accumulate(
+            Reservation(
+                completed == true,
+               	$from: reservedFrom,
+               	$to: reservedTo                
+            ) from $reservations,
+            init(int count = 0;),
+            action(count += TimeUnit.DAYS.convert($to.getTime()-$from.getTime(), TimeUnit.MILLISECONDS);),
+            reverse(count -= TimeUnit.DAYS.convert($to.getTime()-$from.getTime(), TimeUnit.MILLISECONDS);),
+            result(count)
+        )
+        Reservation(
+			completed == true,
+         	accommodation.getPrice() >= 150, 
+         	DateUtils.addYears(new Date(), -1).before(reservedTo)
+        ) from $reservations
+    then
+        System.out.println("Upgraded customer to NETHERITE");
+        $c.setTier(Tier.NETHERITE);
+        update($c);
+end
+
+rule "Downgrade customer tier to Iron"
+	agenda-group "classify-customers"
+    when        
+        $c: Customer(tier == Tier.DIAMOND, $reservations: reservations)
+        Number(intValue < 10) from accumulate(
+            Reservation(
+                completed == true,
+                accommodation.getPrice() >= 150,                
+               	$from: reservedFrom,
+               	$to: reservedTo                
+            ) from $reservations,
+            init(int count = 0;),
+            action(count += TimeUnit.DAYS.convert($to.getTime()-$from.getTime(), TimeUnit.MILLISECONDS);),
+            reverse(count -= TimeUnit.DAYS.convert($to.getTime()-$from.getTime(), TimeUnit.MILLISECONDS);),
+            result(count)
+        )
+        Reservation(
+         	DateUtils.addDays(new Date(), -90).after(reservedTo), 
+			completed == true
+        ) from $reservations
+    then
+        System.out.println("Downgraded customer to IRON");
+        $c.setTier(Tier.IRON);
+        update($c);
+end
+
+rule "Downgrade customer tier to Diamond"
+	agenda-group "classify-customers"
+    when        
+        $c: Customer(tier == Tier.NETHERITE, $reservations: reservations)
+        Reservation(
+			completed == true,
+         	accommodation.getPrice() >= 150, 
+         	DateUtils.addYears(new Date(), -1).after(reservedTo)
+        ) from $reservations
+    then
+        System.out.println("Downgraded customer to DIAMOND");
+        $c.setTier(Tier.DIAMOND);
+        update($c);
+end

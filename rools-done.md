@@ -1,0 +1,4 @@
+- Preporuka:
+  - Cena veca ili jednaka prosecnoj ceni smestaja koje uzima
+  - Ima opcije po ukusu korisnika (opcije koje su 65% ili vise puta koriscene)
+  - Kategorija veca ili jednaka korisniku

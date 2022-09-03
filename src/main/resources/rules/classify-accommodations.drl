@@ -1,0 +1,104 @@
+package rules;
+
+import org.apache.commons.lang.time.DateUtils;
+import java.util.concurrent.TimeUnit;
+import java.util.Date;
+
+import model.Accommodation;
+import model.Tier;
+import model.Reservation;
+
+rule "Upgrade accommodation tier to Iron"
+	agenda-group "classify-accommodations"
+    when        
+        $a: Accommodation(tier == Tier.STONE, rating > 2, $reservations: reservations)        
+		Number(intValue >= 2) from accumulate(
+            Reservation(
+                completed == true,
+                DateUtils.addDays(new Date(), -60).before(reservedTo)                
+            ) from $reservations,
+            count()
+        )
+    then
+        System.out.println("Upgraded accommodation to IRON");
+        $a.setTier(Tier.IRON);
+        update($a);
+end
+
+rule "Upgrade accommodation tier to Diamond"
+	agenda-group "classify-accommodations"
+    when        
+        $a: Accommodation(tier == Tier.IRON, rating > 3, $reservations: reservations)        
+		Number(intValue == 0) from accumulate(
+            Reservation(
+                completed == true,
+                DateUtils.addDays(new Date(), -90).before(reservedTo),
+				rated <= 2 
+            ) from $reservations,
+            count()
+        )
+    then
+        System.out.println("Upgraded accommodation to DIAMOND");
+        $a.setTier(Tier.DIAMOND);
+        update($a);
+end
+
+rule "Upgrade accommodation tier to Netherite"
+	agenda-group "classify-accommodations"
+    when        
+        $a: Accommodation(tier == Tier.DIAMOND, rating > 3, $reservations: reservations)
+        Number(intValue == 0) from accumulate(
+            Reservation(
+                completed == true,
+                DateUtils.addYears(new Date(), -1).before(reservedTo),
+				rated <= 3
+            ) from $reservations,
+            count()
+        )  
+        Number(intValue >= 10) from accumulate(
+            Reservation(
+                completed == true                
+            ) from $reservations,
+            count()
+        )      
+    then
+        System.out.println("Upgraded accommodation to NETHERITE");
+        $a.setTier(Tier.NETHERITE);
+        update($a);
+end
+
+rule "Downgrade accommodation tier to Diamond"
+	agenda-group "classify-accommodations"
+    when        
+        $a: Accommodation(tier == Tier.NETHERITE, $reservations: reservations)
+        Number(intValue > 0) from accumulate(
+            Reservation(
+                completed == true,
+                DateUtils.addYears(new Date(), -1).before(reservedTo),
+				rated <= 3
+            ) from $reservations,
+            count()
+        )
+    then
+        System.out.println("Downgraded accommodation to DIAMOND");
+        $a.setTier(Tier.DIAMOND);
+        update($a);
+end
+
+rule "Downgrade accommodation tier to Iron"
+	agenda-group "classify-accommodations"
+    when        
+        $a: Accommodation(tier == Tier.DIAMOND, $reservations: reservations)
+        Number(intValue > 0) from accumulate(
+            Reservation(
+                completed == true,
+                DateUtils.addDays(new Date(), -90).before(reservedTo),
+				rated <= 2
+            ) from $reservations,
+            count()
+        )
+    then
+        System.out.println("Downgraded accommodation to IRON");
+        $a.setTier(Tier.IRON);
+        update($a);
+end

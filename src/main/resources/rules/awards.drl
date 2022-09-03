@@ -1,0 +1,53 @@
+package rules;
+
+import org.apache.commons.lang.time.DateUtils;
+import java.util.concurrent.TimeUnit;
+import java.util.Date;
+
+import model.Accommodation;
+import model.Tier;
+import model.Reservation;
+
+rule "Returning member coupon award"
+	agenda-group "awards"
+	no-loop true
+    when 
+		$c: Customer($reservations: reservations, 
+			awards.isAwardedReturningCoupon() == false,
+		 	DateUtils.addYears(new Date(), -1).after(registeredAt)
+		 )
+    	Number(intValue == 0) from accumulate(
+            Reservation(
+                completed == true,
+                DateUtils.addYears(new Date(), -1).before(reservedTo)
+            ) from $reservations,
+            count()
+        )
+    
+    then
+        System.out.println("Awarding returning member 25% coupon");
+        $c.getCoupons().add(new Discount(0.25));
+        update($c);
+end
+
+
+rule "First luxury coupon award"
+	agenda-group "awards"
+	no-loop true
+    when 
+		$c: Customer($reservations: reservations, awards.isAwardedDiamondCoupon() == false,
+		tier == Tier.IRON
+		)
+    	Number(intValue == 1) from accumulate(
+            Reservation(
+                completed == true,
+                accommodation.getPrice() > 150.0                
+            ) from $reservations,
+            count()
+        )
+    
+    then
+        System.out.println("Awarding first luxury accommodation 40% coupon");
+        $c.getCoupons().add(new Discount(0.4));
+        update($c);
+end
